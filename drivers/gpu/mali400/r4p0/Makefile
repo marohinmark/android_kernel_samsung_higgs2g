@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2010-2013 ARM Limited. All rights reserved.
+# Copyright (C) 2010-2011 ARM Limited. All rights reserved.
 # 
 # This program is free software and is provided to you under the terms of the GNU General Public License version 2
 # as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
@@ -7,154 +7,255 @@
 # A copy of the licence is included with the program, and can also be obtained from Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
-USING_UMP=0
-USE_UMPV2=0
-USING_PROFILING=1
-USING_INTERNAL_PROFILING ?= 0
-USING_POWER_PERFORMANCE_POLICY ?= 0
-MALI_HEATMAPS_ENABLED ?= 0
-MALI_DMA_BUF_MAP_ON_ATTACH ?= 1
-MALI_PMU_PARALLEL_POWER_UP ?= 0
-MALI_SHARED_INTERRUPTS ?= 1
 
-# The Makefile sets up "arch" based on the CONFIG, creates the version info
-# string and the __malidrv_build_info.c file, and then call the Linux build
-# system to actually build the driver. After that point the Kbuild file takes
-# over.
+# This file is called by the Linux build system.
 
 # set up defaults if not defined by the user
-ARCH ?= arm
+TIMESTAMP ?= default
+OS_MEMORY_KERNEL_BUFFER_SIZE_IN_MB ?= 16
+USING_GPU_UTILIZATION ?= 1
+PROFILING_SKIP_PP_JOBS ?= 0
+PROFILING_SKIP_PP_AND_GP_JOBS ?= 0
+MALI_PP_SCHEDULER_FORCE_NO_JOB_OVERLAP ?= 0
+MALI_PP_SCHEDULER_KEEP_SUB_JOB_STARTS_ALIGNED ?= 0
+MALI_PP_SCHEDULER_FORCE_NO_JOB_OVERLAP_BETWEEN_APPS ?= 0
+MALI_UPPER_HALF_SCHEDULING ?= 1
+USING_PP_CORE ?= 2
+MALI_ENABLE_CPU_CYCLES ?= 0
+MALI_ENABLE_GPU_CONTROL_IN_PARAM ?= 1
 
-OSKOS=linux
-FILES_PREFIX=
-
-check_cc2 = \
-	$(shell if $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; \
-	then \
-		echo "$(2)"; \
-	else \
-		echo "$(3)"; \
-	fi ;)
-
-# This conditional makefile exports the global definition ARM_INTERNAL_BUILD. Customer releases will not include arm_internal.mak
--include ../../../arm_internal.mak
-
-# Give warning of old config parameters are used
-ifneq ($(CONFIG),)
-$(warning "You have specified the CONFIG variable which is no longer in used. Use TARGET_PLATFORM instead.")
+ifeq ($(CONFIG_MALI400_UMP),y)
+EXTRA_DEFINES += -DCONFIG_MALI400_UMP=1
 endif
 
-ifneq ($(CPU),)
-$(warning "You have specified the CPU variable which is no longer in used. Use TARGET_PLATFORM instead.")
+ifeq ($(CONFIG_MALI400_PROFILING),y)
+EXTRA_DEFINES += -DCONFIG_MALI400_PROFILING=1
 endif
 
-# Include the mapping between TARGET_PLATFORM and KDIR + MALI_PLATFORM
--include MALI_CONFIGURATION
-export KDIR ?= $(KDIR-$(TARGET_PLATFORM))
-export MALI_PLATFORM ?= $(MALI_PLATFORM-$(TARGET_PLATFORM))
-
-ifneq ($(TARGET_PLATFORM),)
-ifeq ($(MALI_PLATFORM),)
-$(error "Invalid TARGET_PLATFORM: $(TARGET_PLATFORM)")
-endif
+ifeq ($(CONFIG_MALI400_INTERNAL_PROFILING),y)
+EXTRA_DEFINES += -DCONFIG_MALI400_INTERNAL_PROFILING=1
 endif
 
-# validate lookup result
-ifeq ($(KDIR),)
-$(error No KDIR found for platform $(TARGET_PLATFORM))
+ifeq ($(CONFIG_MALI400_HEATMAPS_ENABLED),y)
+EXTRA_DEFINES += -DCONFIG_MALI400_HEATMAPS_ENABLED
 endif
 
-
-ifeq ($(USING_UMP),1)
-export CONFIG_MALI400_UMP=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_UMP=1
-ifeq ($(USE_UMPV2),1)
-UMP_SYMVERS_FILE ?= ../umpv2/Module.symvers
-else
-UMP_SYMVERS_FILE ?= ../ump/Module.symvers
-endif
-KBUILD_EXTRA_SYMBOLS = $(realpath $(UMP_SYMVERS_FILE))
-$(warning $(KBUILD_EXTRA_SYMBOLS))
+ifeq ($(CONFIG_MALI_DMA_BUF_MAP_ON_ATTACH),y)
+EXTRA_DEFINES += -DCONFIG_MALI_DMA_BUF_MAP_ON_ATTACH
 endif
 
-# Define host system directory
-KDIR-$(shell uname -m):=/lib/modules/$(shell uname -r)/build
-
-include $(KDIR)/.config
-
-ifeq ($(ARCH), arm)
-# when compiling for ARM we're cross compiling
-export CROSS_COMPILE ?= $(call check_cc2, arm-linux-gnueabi-gcc, arm-linux-gnueabi-, arm-eabi-)
+ifeq ($(CONFIG_MALI_SHARED_INTERRUPTS),y)
+EXTRA_DEFINES += -DCONFIG_MALI_SHARED_INTERRUPTS
 endif
 
-# report detected/selected settings
-ifdef ARM_INTERNAL_BUILD
-$(warning TARGET_PLATFORM $(TARGET_PLATFORM))
-$(warning KDIR $(KDIR))
-$(warning MALI_PLATFORM $(MALI_PLATFORM))
-endif
-
-# Set up build config
-export CONFIG_MALI400=m
-export CONFIG_MALI450=y
-
-export EXTRA_DEFINES += -DCONFIG_MALI400=1
-export EXTRA_DEFINES += -DCONFIG_MALI450=1
-
-ifneq ($(MALI_PLATFORM),)
-#export EXTRA_DEFINES += -DMALI_FAKE_PLATFORM_DEVICE=1
-export MALI_PLATFORM_FILES = $(wildcard platform/$(MALI_PLATFORM)/*.c)
-endif
-
-ifeq ($(USING_PROFILING),1)
-ifeq ($(CONFIG_TRACEPOINTS),)
-$(warning CONFIG_TRACEPOINTS required for profiling)
-else
-export CONFIG_MALI400_PROFILING=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_PROFILING=1
-ifeq ($(USING_INTERNAL_PROFILING),1)
-export CONFIG_MALI400_INTERNAL_PROFILING=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_INTERNAL_PROFILING=1
-endif
-ifeq ($(MALI_HEATMAPS_ENABLED),1)
-export MALI_HEATMAPS_ENABLED=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_HEATMAPS_ENABLED
-endif
-endif
-endif
-
-ifeq ($(MALI_DMA_BUF_MAP_ON_ATTACH),1)
-export CONFIG_MALI_DMA_BUF_MAP_ON_ATTACH=y
-export EXTRA_DEFINES += -DCONFIG_MALI_DMA_BUF_MAP_ON_ATTACH
-endif
-
-ifeq ($(MALI_SHARED_INTERRUPTS),1)
-export CONFIG_MALI_SHARED_INTERRUPTS=y
-export EXTRA_DEFINES += -DCONFIG_MALI_SHARED_INTERRUPTS
-endif
-
-ifeq ($(USING_POWER_PERFORMANCE_POLICY),1)
-export CONFIG_MALI400_POWER_PERFORMANCE_POLICY=y
-export EXTRA_DEFINES += -DCONFIG_MALI400_POWER_PERFORMANCE_POLICY
+ifeq ($(CONFIG_MALI400_POWER_PERFORMANCE_POLICY),y)
+EXTRA_DEFINES += -DCONFIG_MALI400_POWER_PERFORMANCE_POLICY
 endif
 
 ifeq ($(MALI_PMU_PARALLEL_POWER_UP),1)
-export CONFIG_MALI_PMU_PARALLEL_POWER_UP=y
-export EXTRA_DEFINES += -DCONFIG_MALI_PMU_PARALLEL_POWER_UP
+EXTRA_DEFINES += -DCONFIG_MALI_PMU_PARALLEL_POWER_UP
 endif
 
-ifneq ($(BUILD),release)
-export CONFIG_MALI400_DEBUG=y
+ifneq ($(CONFIG_MALI400_DEBUG),y)
+EXTRA_DEFINES += -DCONFIG_MALI400_DEBUG
 endif
 
-all: $(UMP_SYMVERS_FILE)
-	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR) modules
-	@rm $(FILES_PREFIX)__malidrv_build_info.c $(FILES_PREFIX)__malidrv_build_info.o
+ifeq ($(CONFIG_MALI400),y)
+MALI_ENABLE_GPU_CONTROL_IN_PARAM := 0
+else
+MALI_ENABLE_GPU_CONTROL_IN_PARAM := 1
+endif
 
-clean:
-	$(MAKE) ARCH=$(ARCH) -C $(KDIR) M=$(CURDIR) clean
+ifeq ($(CONFIG_MALI_PLATFORM_SCX15),y)
+MALI_PLATFORM := scx15
+TARGET_PLATFORM := scx15
+endif
 
-kernelrelease:
-	$(MAKE) ARCH=$(ARCH) -C $(KDIR) kernelrelease
+EXTRA_DEFINES += -DCONFIG_MALI400=1
+EXTRA_DEFINES += -DCONFIG_MALI450=1
 
-export CONFIG KBUILD_EXTRA_SYMBOLS
+################################################################################
+
+mali-y += \
+	linux/mali_osk_atomics.o \
+	linux/mali_osk_irq.o \
+	linux/mali_osk_wq.o \
+	linux/mali_osk_locks.o \
+	linux/mali_osk_wait_queue.o \
+	linux/mali_osk_low_level_mem.o \
+	linux/mali_osk_math.o \
+	linux/mali_osk_memory.o \
+	linux/mali_osk_misc.o \
+	linux/mali_osk_mali.o \
+	linux/mali_osk_notification.o \
+	linux/mali_osk_time.o \
+	linux/mali_osk_timers.o
+
+mali-y += linux/mali_memory.o linux/mali_memory_os_alloc.o
+mali-y += linux/mali_memory_external.o
+mali-y += linux/mali_memory_block_alloc.o
+
+mali-y += \
+	linux/mali_ukk_mem.o \
+	linux/mali_ukk_gp.o \
+	linux/mali_ukk_pp.o \
+	linux/mali_ukk_core.o \
+	linux/mali_ukk_soft_job.o \
+	linux/mali_ukk_timeline.o
+
+# Source files which always are included in a build
+mali-y += \
+	common/mali_kernel_core.o \
+	linux/mali_kernel_linux.o \
+	common/mali_kernel_descriptor_mapping.o \
+	common/mali_session.o \
+	linux/mali_device_pause_resume.o \
+	common/mali_kernel_vsync.o \
+	linux/mali_ukk_vsync.o \
+	linux/mali_kernel_sysfs.o \
+	common/mali_mmu.o \
+	common/mali_mmu_page_directory.o \
+	common/mali_mem_validation.o \
+	common/mali_hw_core.o \
+	common/mali_gp.o \
+	common/mali_pp.o \
+	common/mali_pp_job.o \
+	common/mali_gp_job.o \
+	common/mali_soft_job.o \
+	common/mali_scheduler.o \
+	common/mali_gp_scheduler.o \
+	common/mali_pp_scheduler.o \
+	common/mali_group.o \
+	common/mali_dlbu.o \
+	common/mali_broadcast.o \
+	common/mali_pm.o \
+	common/mali_pmu.o \
+	common/mali_user_settings_db.o \
+	common/mali_kernel_utilization.o \
+	common/mali_l2_cache.o \
+	common/mali_dma.o \
+	common/mali_timeline.o \
+	common/mali_timeline_fence_wait.o \
+	common/mali_timeline_sync_fence.o \
+	common/mali_spinlock_reentrant.o \
+	common/mali_pm_domain.o \
+	linux/mali_osk_pm.o \
+	linux/mali_pmu_power_up_down.o \
+	__malidrv_build_info.o
+
+ifneq ($(MALI_PLATFORM),)
+mali-y += platform/$(MALI_PLATFORM)/mali_platform.o
+ccflags-y += -I$(src)/platform/$(MALI_PLATFORM)
+endif
+
+mali-$(CONFIG_MALI400_PROFILING) += linux/mali_ukk_profiling.o
+mali-$(CONFIG_MALI400_PROFILING) += linux/mali_osk_profiling.o
+
+mali-$(CONFIG_MALI400_INTERNAL_PROFILING) += \
+	linux/mali_profiling_internal.o \
+	timestamp-$(TIMESTAMP)/mali_timestamp.o
+ccflags-$(CONFIG_MALI400_INTERNAL_PROFILING) += -I$(src)/timestamp-$(TIMESTAMP)
+
+mali-$(CONFIG_DMA_SHARED_BUFFER) += linux/mali_memory_dma_buf.o
+mali-$(CONFIG_SYNC) += linux/mali_sync.o
+
+mali-$(CONFIG_MALI400_UMP) += linux/mali_memory_ump.o
+
+mali-$(CONFIG_MALI400_POWER_PERFORMANCE_POLICY) += common/mali_power_performance_policy.o
+
+################################################################################
+
+# Tell the Linux build system from which .o file to create the kernel module
+obj-$(CONFIG_MALI400) := mali.o
+
+ccflags-y += $(EXTRA_DEFINES)
+
+# Set up our defines, which will be passed to gcc
+ccflags-y += -DSPRD_MEM_OPT_PAGE_TABLE_SHRINK
+ccflags-y += -DSPRD_GPU_BOOST
+
+ccflags-y += -DPROFILING_SKIP_PP_JOBS=$(PROFILING_SKIP_PP_JOBS)
+ccflags-y += -DPROFILING_SKIP_PP_AND_GP_JOBS=$(PROFILING_SKIP_PP_AND_GP_JOBS)
+
+ccflags-y += -DMALI_PP_SCHEDULER_FORCE_NO_JOB_OVERLAP=$(MALI_PP_SCHEDULER_FORCE_NO_JOB_OVERLAP)
+ccflags-y += -DMALI_PP_SCHEDULER_KEEP_SUB_JOB_STARTS_ALIGNED=$(MALI_PP_SCHEDULER_KEEP_SUB_JOB_STARTS_ALIGNED)
+ccflags-y += -DMALI_PP_SCHEDULER_FORCE_NO_JOB_OVERLAP_BETWEEN_APPS=$(MALI_PP_SCHEDULER_FORCE_NO_JOB_OVERLAP_BETWEEN_APPS)
+ccflags-y += -DMALI_STATE_TRACKING=1
+ccflags-y += -DMALI_OS_MEMORY_KERNEL_BUFFER_SIZE_IN_MB=$(OS_MEMORY_KERNEL_BUFFER_SIZE_IN_MB)
+ccflags-y += -DUSING_GPU_UTILIZATION=$(USING_GPU_UTILIZATION)
+ccflags-y += -DMALI_PP_CORE_NUMBER=$(USING_PP_CORE)
+ccflags-y += -DMALI_ENABLE_CPU_CYCLES=$(MALI_ENABLE_CPU_CYCLES)
+ccflags-y += -DMALI_ENABLE_GPU_CONTROL_IN_PARAM=$(MALI_ENABLE_GPU_CONTROL_IN_PARAM)
+
+ifeq ($(MALI_UPPER_HALF_SCHEDULING),1)
+ccflags-y += -DMALI_UPPER_HALF_SCHEDULING
+endif
+
+ccflags-$(CONFIG_MALI400_UMP) += -I$(src)/../ump/include/ump
+ccflags-$(CONFIG_MALI400_DEBUG) += -DDEBUG
+
+# Use our defines when compiling
+ccflags-y += \
+	-I$(src) \
+	-I$(src)/include \
+	-I$(src)/linux \
+	-I$(src)/linux/license/gpl \
+	-I$(src)/common \
+	-I$(src)/platform
+
+################################################################################
+
+# Get subversion revision number, fall back to only ${MALI_RELEASE_NAME} if no svn info is available
+MALI_RELEASE_NAME=$(shell cat $(src)/.version 2> /dev/null)
+
+ifneq ($(shell $(SVN_INFO) 2>/dev/null),)
+# SVN detected
+SVN_REV := $(shell $(SVN_INFO) | grep '^Revision: '| sed -e 's/^Revision: //' 2>/dev/null)
+DRIVER_REV := $(MALI_RELEASE_NAME)-r$(SVN_REV)
+CHANGE_DATE := $(shell $(SVN_INFO) | grep '^Last Changed Date: ' | cut -d: -f2- | cut -b2-)
+CHANGED_REVISION := $(shell $(SVN_INFO) | grep '^Last Changed Rev: ' | cut -d: -f2- | cut -b2-)
+REPO_URL := $(shell $(SVN_INFO) | grep '^URL: ' | cut -d: -f2- | cut -b2-)
+
+else # SVN
+#GIT_REV := $(shell cd $(src); git describe --always 2>/dev/null)
+ifneq ($(GIT_REV),)
+# Git detected
+DRIVER_REV := $(MALI_RELEASE_NAME)-$(GIT_REV)
+CHANGE_DATE := $(shell cd $(src); git log -1 --format="%ci")
+CHANGED_REVISION := $(GIT_REV)
+REPO_URL := $(shell cd $(src); git describe --all --always 2>/dev/null)
+
+else # Git
+# No Git or SVN detected
+DRIVER_REV := $(MALI_RELEASE_NAME)
+CHANGE_DATE := $(MALI_RELEASE_NAME)
+CHANGED_REVISION := $(MALI_RELEASE_NAME)
+endif
+endif
+
+ccflags-y += -DSVN_REV_STRING="\"$(DRIVER_REV)\""
+
+#VERSION_STRINGS += API_VERSION=$(shell cd $(src); grep "\#define _MALI_API_VERSION" include/linux/mali/mali_utgard_uk_types.h | cut -d' ' -f 3 )
+VERSION_STRINGS += API_VERSION=401
+VERSION_STRINGS += REPO_URL=$(REPO_URL)
+VERSION_STRINGS += REVISION=$(DRIVER_REV)
+VERSION_STRINGS += CHANGED_REVISION=$(CHANGED_REVISION)
+VERSION_STRINGS += CHANGE_DATE=$(CHANGE_DATE)
+VERSION_STRINGS += BUILD_DATE=$(shell date)
+ifdef CONFIG_MALI400_DEBUG
+VERSION_STRINGS += BUILD=debug
+else
+VERSION_STRINGS += BUILD=release
+endif
+VERSION_STRINGS += TARGET_PLATFORM=$(TARGET_PLATFORM)
+VERSION_STRINGS += MALI_PLATFORM=$(MALI_PLATFORM)
+VERSION_STRINGS += KDIR=$(KDIR)
+VERSION_STRINGS += OS_MEMORY_KERNEL_BUFFER_SIZE_IN_MB=$(OS_MEMORY_KERNEL_BUFFER_SIZE_IN_MB)
+VERSION_STRINGS += USING_UMP=$(CONFIG_MALI400_UMP)
+VERSION_STRINGS += USING_PROFILING=$(CONFIG_MALI400_PROFILING)
+VERSION_STRINGS += USING_INTERNAL_PROFILING=$(CONFIG_MALI400_INTERNAL_PROFILING)
+VERSION_STRINGS += USING_GPU_UTILIZATION=$(USING_GPU_UTILIZATION)
+VERSION_STRINGS += USING_POWER_PERFORMANCE_POLICY=$(CONFIG_POWER_PERFORMANCE_POLICY)
+VERSION_STRINGS += MALI_UPPER_HALF_SCHEDULING=$(MALI_UPPER_HALF_SCHEDULING)
+
+ccflags-y += -DVERSION_STRINGS="\"$(VERSION_STRINGS)\""

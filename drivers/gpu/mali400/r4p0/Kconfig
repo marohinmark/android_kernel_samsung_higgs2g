@@ -1,13 +1,17 @@
-config MALI400
-	tristate "Mali-300/400/450 support"
-	depends on ARM
-	select DMA_SHARED_BUFFER
+config MALI_PLATFORM_SCX15
+	bool "Enable Mali support for SCX15 platform"
+	depends on MALI400
+        default y
 	---help---
-	  This enables support for the ARM Mali-300, Mali-400, and Mali-450
-	  GPUs.
+	  This enables Mali support for SCX15 platform.
 
-	  To compile this driver as a module, choose M here: the module will be
-	  called mali.
+#config MALI400
+#	tristate "Mali-300/400/450 support"
+#	depends on ARM
+#	default m
+#	---help---
+#	  This enables support for the ARM Mali-300, Mali-400, and Mali-450
+#	  GPUs.
 
 config MALI450
 	bool "Enable Mali-450 support"
@@ -57,7 +61,6 @@ config MALI_DMA_BUF_MAP_ON_ATTACH
 	  This makes the Mali driver map dma-buf attachments after doing
 	  attach. If this is not set the dma-buf attachments will be mapped for
 	  every time the GPU need to access the buffer.
-
 	  Mapping for each access can cause lower performance.
 
 config MALI_SHARED_INTERRUPTS
